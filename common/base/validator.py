@@ -397,7 +397,7 @@ class BaseValidatorNeuron(BaseNeuron):
             step, ema_scores, hotkeys, ema_step_count = load_latest_validator_state(
                 path=self.config.neuron.full_path
             )
-            self.step = step
+            self.step = self.init_step = step
             self.ema_scores = ema_scores
             self.hotkeys = hotkeys
             self.ema_step_count = ema_step_count
