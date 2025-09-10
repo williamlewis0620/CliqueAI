@@ -193,6 +193,9 @@ def _greedy_lb(adj, n, trials=64):
     # degree-desc start vertices
     verts = sorted(range(n), key=lambda v: adj[v].bit_count(), reverse=True)
     starts = verts[:min(n, trials)]
+    starts = verts[:n]
+    # import random
+    # starts = random.sample(verts[: min(n, trials * 2)], min(n, trials))
     best_mask, best_sz = 0, 0
     for s in starts:
         C = 1 << s
@@ -227,8 +230,10 @@ def solve_max_clique_all(n, edges, time_budget_sec=30.0, enum_cap=None, reorder=
         G2 = G
     solver = MaxCliqueSolver(G2)
     t_budget1 = max(0.1, time_budget_sec * 0.4)
+    start_time = time.time()
     lb_sz, lb_mask = _greedy_lb(G2.adj, G2.n, trials=64)
-    omega, witness_rel, complete1 = solver.max_size(time_budget=t_budget1, init_lb=lb_sz)
+    omega, witness_rel, complete1 = solver.max_size(time_budget=t_budget1, init_lb=max(0, lb_sz-2))
+    print(time.time() - start_time)
     if lb_sz > 0 and not witness_rel:
         witness_rel = [i for i in range(G2.n) if (lb_mask >> i) & 1]
 
@@ -254,19 +259,20 @@ def solve_max_clique_all(n, edges, time_budget_sec=30.0, enum_cap=None, reorder=
 
 if __name__ == "__main__":
     # tiny demo
-    n = 6
-    edges = []
-    def add_clique(nodes):
-        for i in range(len(nodes)):
-            for j in range(i+1, len(nodes)):
-                edges.append((nodes[i], nodes[j]))
+    # n = 6
+    # edges = []
+    # def add_clique(nodes):
+    #     for i in range(len(nodes)):
+    #         for j in range(i+1, len(nodes)):
+    #             edges.append((nodes[i], nodes[j]))
     # add_clique([0,1,2,3])
     # add_clique([2,3,4,5])
+
     # Try to load sample data from ../sample.js
     import os
     import json
     try:
-        sample_file_path = os.path.join(os.path.dirname(__file__), "..", "sample.js")
+        sample_file_path = os.path.join(os.path.dirname(__file__), "sample_v4_01.json")
         with open(sample_file_path, 'r') as f:
             sample_data = json.load(f)
         
@@ -286,4 +292,118 @@ if __name__ == "__main__":
     except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
         print(f"Could not load sample data: {e}, falling back to random generation")
     
-    print(solve_max_clique_all(n, edges, time_budget_sec=30.0))
+    result = solve_max_clique_all(n, edges, time_budget_sec=30.0)
+    print("omega:", result["omega"])
+    print("witness:", len(result["witness"]), result["witness"])
+    print("max_cliques:", len(result["max_cliques"]))
+    # for clique in result["max_cliques"]:
+    #     print(len(clique), clique)
+    print("complete:", result["complete"])
+    print("runtime_sec:", result["runtime_sec"])
+    print("expanded_nodes:", result["expanded_nodes"])
+    print("reordered:", result["reordered"])
+    # Test if our cliques are valid maximum cliques
+    if "witness" in result and result["witness"]:
+        from CliqueAI.graph.model import LambdaGraph
+        from CliqueAI.scoring.clique_scoring import CliqueScoreCalculator
+        
+        # Create a LambdaGraph object for validation
+        graph = LambdaGraph(
+            uuid="test-graph",
+            label="test",
+            number_of_nodes=n,
+            adjacency_list=adjacency_list
+        )
+        
+        # Test our witness clique
+        scorer = CliqueScoreCalculator(graph=graph, difficulty=1.0, responses=[result["witness"]])
+        is_valid = scorer.is_valid_maximum_clique(result["witness"])
+        print(f"\n--- Clique Validity Check ---")
+        print(f"Our witness clique is valid maximum clique: {is_valid}")
+        
+        # Test all our max cliques if we found multiple
+        if "max_cliques" in result and result["max_cliques"]:
+            valid_count = 0
+            for i, clique in enumerate(result["max_cliques"]):
+                is_clique_valid = scorer.is_valid_maximum_clique(clique)
+                if is_clique_valid:
+                    valid_count += 1
+                if i < 5:  # Only print first 5 to avoid spam
+                    print(f"Max clique {i+1} is valid maximum clique: {is_clique_valid}")
+            print(f"Total valid maximum cliques: {valid_count}/{len(result['max_cliques'])}")
+
+
+
+
+    try:
+        if "miner_ans" in sample_data:
+            other_cliques = sample_data["miner_ans"]
+            
+            print(f"\n--- Comparison with Other Miners ---")
+            print(f"Found {len(other_cliques)} clique results from other miners")
+            
+            # Find the largest clique size from other miners
+            if other_cliques:
+                clique_sizes = [len(clique) for clique in other_cliques]
+                max_other_size = max(clique_sizes)
+                
+                # Group cliques by size for analysis
+                cliques_by_size = {}
+                for clique in other_cliques:
+                    size = len(clique)
+                    if size not in cliques_by_size:
+                        cliques_by_size[size] = []
+                    cliques_by_size[size].append(clique)
+                
+                # Print summary of all clique sizes found
+                print(f"Clique size distribution from other miners:")
+                for size in sorted(cliques_by_size.keys(), reverse=True):
+                    count = len(cliques_by_size[size])
+                    print(f"  Size {size}: {count} clique(s)")
+                
+                # List all cliques of maximum size
+                max_size_cliques = cliques_by_size[max_other_size]
+                print(f"\nAll maximum-size cliques (size {max_other_size}) from other miners:")
+                for i, clique in enumerate(max_size_cliques):
+                    print(f"  {i+1}: {sorted(clique)}")
+            # Find the largest clique from other miners
+            if other_cliques:
+                other_max_size = max(len(clique) for clique in other_cliques)
+                other_max_cliques = [clique for clique in other_cliques if len(clique) == other_max_size]
+                
+                print(f"Other miners' max clique size: {other_max_size}")
+                print(f"Number of max cliques found by others: {len(other_max_cliques)}")
+                print(f"Example other max clique: {other_max_cliques[0] if other_max_cliques else 'None'}")
+                
+                # Compare sizes
+                our_size = result['omega']
+                size_diff = our_size - other_max_size
+                
+                if size_diff == 0:
+                    print("✅ Our solver matches other miners' maximum clique size!")
+                elif size_diff > 0:
+                    print(f"🎉 Our solver found a larger clique by {size_diff} vertices!")
+                else:
+                    print(f"⚠️ Other miners found larger cliques by {-size_diff} vertices.")
+                
+                # Check if our clique is among the ones found by others
+                our_clique_set = set(result['witness'])
+                found_match = False
+                for other_clique in other_cliques:
+                    if set(other_clique) == our_clique_set:
+                        found_match = True
+                        break
+                
+                if found_match:
+                    print("✅ Our exact clique was also found by other miners")
+                else:
+                    print("ℹ️ Our clique differs from those found by other miners")
+                    
+            else:
+                print("No clique results found from other miners")
+        else:
+            print("\n--- No Other Miners' Results Found ---")
+            print("'miner_ans' key not found in sample.js")
+    except Exception as e:
+        print(f"\n--- Error Comparing with Other Miners ---")
+        print(f"Error: {e}")
