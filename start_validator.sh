@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VALIDATOR_NAME=validator-CliqueAI
+VALIDATOR_NAME=validator
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for arg in "$@"; do
     VALIDATOR_ARGS="$VALIDATOR_ARGS $arg"
